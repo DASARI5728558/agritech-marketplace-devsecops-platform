@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agrimarket.fullname" . }}-api
+  labels:
+    {{- include "agrimarket.labels" . | nindent 4 }}
+    component: api
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "agrimarket.selectorLabels" . | nindent 4 }}
+    component: api

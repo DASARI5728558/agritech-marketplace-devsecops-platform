@@ -1,0 +1,27 @@
+# Java
+app/target/
+*.class
+*.jar
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+terraform.tfplan
+.terraform.lock.hcl
+
+# Secrets
+.env
+*.pem
+kubeconfig*
+
+# OS
+.DS_Store
+Thumbs.db

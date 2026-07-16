@@ -1,0 +1,20 @@
+# Fixed-name alias Service so the hostname baked into the frontend's
+# nginx config (nginx/default.conf -> proxy_pass agritech-backend-svc:8080)
+# resolves correctly regardless of the Helm release name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: agritech-backend-svc
+  labels:
+    {{- include "agrimarket.labels" . | nindent 4 }}
+    component: api
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "agrimarket.selectorLabels" . | nindent 4 }}
+    component: api

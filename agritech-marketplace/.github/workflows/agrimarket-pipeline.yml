@@ -1,0 +1,311 @@
+name: AgriTech Marketplace CI/CD Pipeline
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+  id-token: write
+
+concurrency:
+  group: agrimarket-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'agritech-marketplace-dev' }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'agrimarket-api' }}
+  ECR_FRONTEND_REPOSITORY: ${{ vars.ECR_FRONTEND_REPOSITORY || 'agrimarket-frontend' }}
+  HELM_RELEASE: agrimarket
+  HELM_NAMESPACE: agrimarket
+
+jobs:
+  test-and-code-quality:
+    name: Unit Tests + SonarQube
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Run unit and integration tests
+        run: mvn -f app/pom.xml -B clean verify
+
+      - name: SonarQube analysis
+        if: ${{ env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' }}
+        run: |
+          mvn -f app/pom.xml -B sonar:sonar \
+            -Dsonar.host.url="$SONAR_HOST_URL" \
+            -Dsonar.token="$SONAR_TOKEN"
+
+  terraform-apply:
+    name: Terraform Apply AWS Infrastructure
+    runs-on: ubuntu-latest
+    needs: test-and-code-quality
+    if: github.ref == 'refs/heads/main'
+
+    outputs:
+      cluster-name: ${{ steps.tf-output.outputs.cluster-name }}
+      rds-endpoint: ${{ steps.tf-output.outputs.rds-endpoint }}
+      ecr-repository-url: ${{ steps.tf-output.outputs.ecr-repository-url }}
+      ecr-frontend-repository-url: ${{ steps.tf-output.outputs.ecr-frontend-repository-url }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: terraform/environments/dev
+        run: terraform init
+
+      - name: Terraform format check
+        working-directory: terraform
+        run: terraform fmt -check -recursive
+
+      - name: Terraform validate
+        working-directory: terraform/environments/dev
+        run: terraform validate
+
+      - name: Terraform apply
+        working-directory: terraform/environments/dev
+        run: |
+          terraform apply -auto-approve \
+            -var="aws_region=${AWS_REGION}" \
+            -var="ecr_repository_name=${ECR_REPOSITORY}" \
+            -var="ecr_frontend_repository_name=${ECR_FRONTEND_REPOSITORY}" \
+            -var="db_password=${{ secrets.RDS_MASTER_PASSWORD }}"
+
+      - name: Read Terraform outputs
+        id: tf-output
+        working-directory: terraform/environments/dev
+        run: |
+          echo "cluster-name=$(terraform output -raw cluster_name)" >> "$GITHUB_OUTPUT"
+          echo "rds-endpoint=$(terraform output -raw rds_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "ecr-repository-url=$(terraform output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
+          echo "ecr-frontend-repository-url=$(terraform output -raw ecr_frontend_repository_url)" >> "$GITHUB_OUTPUT"
+
+  build-scan-push-backend:
+    name: Backend Docker Build + Trivy + ECR Push
+    runs-on: ubuntu-latest
+    needs: terraform-apply
+    if: github.ref == 'refs/heads/main'
+
+    outputs:
+      image-uri: ${{ steps.image.outputs.image-uri }}
+      image-tag: ${{ steps.image.outputs.image-tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image metadata
+        id: image
+        run: |
+          IMAGE_URI="${{ needs.terraform-apply.outputs.ecr-repository-url }}"
+          IMAGE_TAG="${GITHUB_SHA::12}"
+          echo "image-uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+          echo "image-tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t "${{ steps.image.outputs.image-uri }}:${{ steps.image.outputs.image-tag }}" \
+            -t "${{ steps.image.outputs.image-uri }}:latest" \
+            ./app
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.image.outputs.image-uri }}:${{ steps.image.outputs.image-tag }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Upload Trivy SARIF report
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Push Docker image to Amazon ECR
+        run: |
+          docker push "${{ steps.image.outputs.image-uri }}:${{ steps.image.outputs.image-tag }}"
+          docker push "${{ steps.image.outputs.image-uri }}:latest"
+
+  build-scan-push-frontend:
+    name: Frontend Docker Build + Trivy + ECR Push
+    runs-on: ubuntu-latest
+    needs: terraform-apply
+    if: github.ref == 'refs/heads/main'
+
+    outputs:
+      image-uri: ${{ steps.image.outputs.image-uri }}
+      image-tag: ${{ steps.image.outputs.image-tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image metadata
+        id: image
+        run: |
+          IMAGE_URI="${{ needs.terraform-apply.outputs.ecr-frontend-repository-url }}"
+          IMAGE_TAG="${GITHUB_SHA::12}"
+          echo "image-uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+          echo "image-tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      # Build context is the repo root because frontend/Dockerfile also
+      # copies in nginx/default.conf (see that Dockerfile for details).
+      - name: Build Docker image
+        run: |
+          docker build \
+            -f frontend/Dockerfile \
+            -t "${{ steps.image.outputs.image-uri }}:${{ steps.image.outputs.image-tag }}" \
+            -t "${{ steps.image.outputs.image-uri }}:latest" \
+            .
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.image.outputs.image-uri }}:${{ steps.image.outputs.image-tag }}
+          format: sarif
+          output: trivy-results-frontend.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Upload Trivy SARIF report
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results-frontend.sarif
+
+      - name: Push Docker image to Amazon ECR
+        run: |
+          docker push "${{ steps.image.outputs.image-uri }}:${{ steps.image.outputs.image-tag }}"
+          docker push "${{ steps.image.outputs.image-uri }}:latest"
+
+  deploy-to-eks:
+    name: Helm Upgrade to Amazon EKS
+    runs-on: ubuntu-latest
+    needs:
+      - terraform-apply
+      - build-scan-push-backend
+      - build-scan-push-frontend
+    if: github.ref == 'refs/heads/main'
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name "${{ needs.terraform-apply.outputs.cluster-name }}"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Deploy ingress-nginx controller
+        run: |
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+          helm repo update
+          helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+            --namespace ingress-nginx --create-namespace \
+            --set controller.replicaCount=2 \
+            --wait --timeout 10m
+
+      - name: Deploy Prometheus and Grafana
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+          helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+            --namespace monitoring --create-namespace \
+            -f monitoring/prometheus/kube-prometheus-stack-values.yaml \
+            --wait --timeout 15m
+
+      - name: Helm upgrade application
+        run: |
+          helm upgrade --install "$HELM_RELEASE" ./helm/agrimarket \
+            --namespace "$HELM_NAMESPACE" --create-namespace \
+            --set image.repository="${{ needs.build-scan-push-backend.outputs.image-uri }}" \
+            --set image.tag="${{ needs.build-scan-push-backend.outputs.image-tag }}" \
+            --set nginx.image.repository="${{ needs.build-scan-push-frontend.outputs.image-uri }}" \
+            --set nginx.image.tag="${{ needs.build-scan-push-frontend.outputs.image-tag }}" \
+            --set database.host="${{ needs.terraform-apply.outputs.rds-endpoint }}" \
+            --set secrets.databaseUsername="app_user" \
+            --set secrets.databasePassword="${{ secrets.RDS_MASTER_PASSWORD }}" \
+            --set monitoring.serviceMonitor.enabled=true \
+            --wait --timeout 10m
+
+      - name: Verify rollout
+        run: |
+          kubectl rollout status deployment/${HELM_RELEASE}-agrimarket-api -n "$HELM_NAMESPACE" --timeout=300s
+          kubectl rollout status deployment/${HELM_RELEASE}-agrimarket-nginx -n "$HELM_NAMESPACE" --timeout=300s
+          kubectl get pods,svc,ingress -n "$HELM_NAMESPACE"

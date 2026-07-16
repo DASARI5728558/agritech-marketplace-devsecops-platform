@@ -1,0 +1,15 @@
+apiVersion: v2
+name: agrimarket
+description: Helm chart for the AgriTech Marketplace (static frontend + Spring Boot API) on Amazon EKS
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - spring-boot
+  - nginx
+  - eks
+  - agritech
+  - marketplace
+maintainers:
+  - name: Your Name
+    email: your.email@example.com

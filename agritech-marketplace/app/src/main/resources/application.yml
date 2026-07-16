@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: agrimarket-api
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:agrimarket}?useSSL=true&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USERNAME:app_user}
+    password: ${DB_PASSWORD:app_password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: 8080
+  shutdown: graceful
+  servlet:
+    context-path: /
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+info:
+  app:
+    name: AgriTech Marketplace API
+    description: Spring Boot API for the AgriTech Marketplace, running on Amazon EKS
+    version: 1.0.0
+
+logging:
+  level:
+    root: INFO
+    com.example.agrimarket: INFO

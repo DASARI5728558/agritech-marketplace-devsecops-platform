@@ -1,0 +1,49 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: agrimarket-mysql
+    environment:
+      MYSQL_DATABASE: agrimarket
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD: app_password
+      MYSQL_ROOT_PASSWORD: root_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Hostname must match nginx/default.conf's proxy_pass target.
+  agritech-backend-svc:
+    build:
+      context: ./app
+    container_name: agrimarket-api
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: agrimarket
+      DB_USERNAME: app_user
+      DB_PASSWORD: app_password
+    depends_on:
+      mysql:
+        condition: service_healthy
+    expose:
+      - "8080"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: agrimarket-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - agritech-backend-svc
+
+volumes:
+  mysql_data:

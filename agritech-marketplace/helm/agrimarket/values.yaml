@@ -1,0 +1,107 @@
+replicaCount: 2
+
+image:
+  repository: "000000000000.dkr.ecr.ap-south-1.amazonaws.com/agrimarket-api"
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# "nginx" here is the AgriTech Marketplace static frontend: an nginx image
+# built from frontend/Dockerfile that bakes in both the static site and the
+# /api/ reverse-proxy config (see nginx/default.conf).
+nginx:
+  image:
+    repository: "000000000000.dkr.ecr.ap-south-1.amazonaws.com/agrimarket-frontend"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/actuator/prometheus"
+  prometheus.io/port: "8080"
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 100
+
+service:
+  type: ClusterIP
+  port: 8080
+
+nginxService:
+  type: ClusterIP
+  port: 80
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 750m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  hosts:
+    - host: agrimarket.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+config:
+  springProfilesActive: prod
+  dbName: agrimarket
+  dbPort: "3306"
+
+database:
+  host: "replace-with-rds-endpoint.ap-south-1.rds.amazonaws.com"
+
+secrets:
+  databaseUsername: app_user
+  databasePassword: change-me
+
+monitoring:
+  serviceMonitor:
+    # Keep false unless kube-prometheus-stack CRDs are installed.
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    labels:
+      release: monitoring
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

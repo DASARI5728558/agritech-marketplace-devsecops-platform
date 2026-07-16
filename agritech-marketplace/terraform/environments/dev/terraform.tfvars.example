@@ -1,0 +1,7 @@
+aws_region          = "ap-south-1"
+project_name        = "agritech-marketplace"
+environment         = "dev"
+db_password         = "replace-with-a-strong-password"
+rds_multi_az        = false
+rds_instance_class  = "db.t3.micro"
+node_instance_types = ["t3.micro"]
