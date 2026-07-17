@@ -21,6 +21,6 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: agritech-marketplace/frontend/pages
+          path: agritech-marketplace/frontend
 
       - uses: actions/deploy-pages@v4
