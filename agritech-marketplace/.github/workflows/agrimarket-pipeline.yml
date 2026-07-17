@@ -1,3 +1,7 @@
+# IMPORTANT: this file must live at <repo-root>/.github/workflows/agrimarket-pipeline.yml
+# and the project folders (app/, terraform/, frontend/, helm/, monitoring/, nginx/)
+# must also be at the repo root — all paths below are relative to the repo root.
+
 name: AgriTech Marketplace CI/CD Pipeline
 
 on:
@@ -309,3 +313,4 @@ jobs:
           kubectl rollout status deployment/${HELM_RELEASE}-agrimarket-api -n "$HELM_NAMESPACE" --timeout=300s
           kubectl rollout status deployment/${HELM_RELEASE}-agrimarket-nginx -n "$HELM_NAMESPACE" --timeout=300s
           kubectl get pods,svc,ingress -n "$HELM_NAMESPACE"
+
