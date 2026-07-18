@@ -62,7 +62,7 @@ class ProduceControllerIntegrationTest {
 
         mockMvc.perform(get("/api/v1/produce/" + produceId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.quantityAvailable", is(50)));
+                .andExpect(jsonPath("$.quantityAvailable", is(50.0)));
 
         String buyerPayload = """
                 {"name":"Ravi Kumar","email":"ravi@example.com","deliveryAddress":"12 MG Road"}
@@ -89,7 +89,7 @@ class ProduceControllerIntegrationTest {
 
         mockMvc.perform(get("/api/v1/produce/" + produceId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.quantityAvailable", is(45)));
+                .andExpect(jsonPath("$.quantityAvailable", is(45.0)));
     }
 
     @Test
