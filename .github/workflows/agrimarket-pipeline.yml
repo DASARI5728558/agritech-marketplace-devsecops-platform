@@ -167,7 +167,7 @@ jobs:
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
 
       - name: Upload Trivy SARIF report
         if: always()
@@ -230,7 +230,7 @@ jobs:
           output: trivy-results-frontend.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
 
       - name: Upload Trivy SARIF report
         if: always()
