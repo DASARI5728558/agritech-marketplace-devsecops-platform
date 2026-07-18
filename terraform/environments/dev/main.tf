@@ -1,6 +1,5 @@
 terraform {
   required_version = ">= 1.7.0"
-
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -8,19 +7,17 @@ terraform {
     }
   }
 
-  # Recommended for real usage:
-  # backend "s3" {
-  #   bucket         = "your-terraform-state-bucket"
-  #   key            = "agrimarket/dev/terraform.tfstate"
-  #   region         = "ap-south-1"
-  #   dynamodb_table = "terraform-locks"
-  #   encrypt        = true
-  # }
+  backend "s3" {
+    bucket         = "agrimarket-terraform-state-dasari5728558"
+    key            = "dev/terraform.tfstate"
+    region         = "ap-south-1"
+    dynamodb_table = "agrimarket-terraform-locks"
+    encrypt        = true
+  }
 }
 
 provider "aws" {
   region = var.aws_region
-
   default_tags {
     tags = local.tags
   }
@@ -34,9 +31,7 @@ locals {
   project      = var.project_name
   environment  = var.environment
   cluster_name = "${local.project}-${local.environment}"
-
-  azs = slice(data.aws_availability_zones.available.names, 0, 3)
-
+  azs          = slice(data.aws_availability_zones.available.names, 0, 3)
   tags = {
     Project     = local.project
     Environment = local.environment
@@ -76,10 +71,11 @@ module "eks" {
   vpc_id          = module.network.vpc_id
   private_subnets = module.network.private_subnets
 
-  node_instance_types     = var.node_instance_types
-  node_min_size           = var.node_min_size
-  node_desired_size       = var.node_desired_size
-  node_max_size           = var.node_max_size
+  node_instance_types = var.node_instance_types
+  node_min_size       = var.node_min_size
+  node_desired_size   = var.node_desired_size
+  node_max_size       = var.node_max_size
+
   ebs_csi_driver_role_arn = aws_iam_role.ebs_csi_driver.arn
 }
 
@@ -101,6 +97,7 @@ module "rds" {
 
   depends_on = [module.eks]
 }
+
 data "aws_iam_policy_document" "ebs_csi_driver_assume_role" {
   statement {
     effect  = "Allow"
@@ -134,4 +131,3 @@ resource "aws_iam_role_policy_attachment" "ebs_csi_driver_attach" {
   role       = aws_iam_role.ebs_csi_driver.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
-
