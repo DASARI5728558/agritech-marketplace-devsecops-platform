@@ -285,14 +285,14 @@ jobs:
             --set controller.replicaCount=2 \
             --wait --timeout 10m
 
-      - name: Deploy Prometheus and Grafana
-        run: |
-          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-          helm repo update
-          helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
-            --namespace monitoring --create-namespace \
-            -f monitoring/prometheus/kube-prometheus-stack-values.yaml \
-            --wait --timeout 15m
+      # - name: Deploy Prometheus and Grafana
+      #   run: |
+      #     helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+      #     helm repo update
+      #     helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+      #       --namespace monitoring --create-namespace \
+      #       -f monitoring/prometheus/kube-prometheus-stack-values.yaml \
+      #       --wait --timeout 15m
 
       - name: Helm upgrade application
         run: |
@@ -305,7 +305,7 @@ jobs:
             --set database.host="${{ needs.terraform-apply.outputs.rds-endpoint }}" \
             --set secrets.databaseUsername="app_user" \
             --set secrets.databasePassword="${{ secrets.RDS_MASTER_PASSWORD }}" \
-            --set monitoring.serviceMonitor.enabled=true \
+            --set monitoring.serviceMonitor.enabled=false \
             --wait --timeout 10m
 
       - name: Verify rollout
