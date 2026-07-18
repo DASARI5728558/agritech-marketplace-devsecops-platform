@@ -12,6 +12,7 @@ terraform {
     key            = "dev/terraform.tfstate"
     region         = "ap-south-1"
     dynamodb_table = "agrimarket-terraform-locks"
+    use_lockfile   = true
     encrypt        = true
   }
 }
