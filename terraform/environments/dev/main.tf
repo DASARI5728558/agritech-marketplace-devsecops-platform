@@ -76,28 +76,28 @@ module "eks" {
   vpc_id          = module.network.vpc_id
   private_subnets = module.network.private_subnets
 
-  node_instance_types = var.node_instance_types
-  node_min_size       = var.node_min_size
-  node_desired_size   = var.node_desired_size
-  node_max_size       = var.node_max_size
+  node_instance_types     = var.node_instance_types
+  node_min_size           = var.node_min_size
+  node_desired_size       = var.node_desired_size
+  node_max_size           = var.node_max_size
   ebs_csi_driver_role_arn = aws_iam_role.ebs_csi_driver.arn
 }
 
 module "rds" {
   source = "../../modules/rds"
 
-  project_name                = local.project
-  environment                 = local.environment
-  vpc_id                      = module.network.vpc_id
-  vpc_cidr                    = var.vpc_cidr
-  private_subnets             = module.network.private_subnets
-  allowed_security_group_ids  = [module.eks.node_security_group_id]
-  database_name               = var.database_name
-  database_username           = var.database_username
-  database_password           = var.db_password
-  instance_class              = var.rds_instance_class
-  allocated_storage           = var.rds_allocated_storage
-  multi_az                    = var.rds_multi_az
+  project_name               = local.project
+  environment                = local.environment
+  vpc_id                     = module.network.vpc_id
+  vpc_cidr                   = var.vpc_cidr
+  private_subnets            = module.network.private_subnets
+  allowed_security_group_ids = [module.eks.node_security_group_id]
+  database_name              = var.database_name
+  database_username          = var.database_username
+  database_password          = var.db_password
+  instance_class             = var.rds_instance_class
+  allocated_storage          = var.rds_allocated_storage
+  multi_az                   = var.rds_multi_az
 
   depends_on = [module.eks]
 }
