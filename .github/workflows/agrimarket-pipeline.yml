@@ -306,10 +306,18 @@ jobs:
             --set secrets.databaseUsername="app_user" \
             --set secrets.databasePassword="${{ secrets.RDS_MASTER_PASSWORD }}" \
             --set monitoring.serviceMonitor.enabled=false \
+            --set replicaCount=1 \
+            --set nginx.replicaCount=1 \
+            --set autoscaling.enabled=false \
+            --set resources.requests.memory=150Mi \
+            --set resources.requests.cpu=100m \
+            --set resources.limits.memory=400Mi \
+            --set nginx.resources.requests.memory=32Mi \
+            --set nginx.resources.requests.cpu=25m \
             --wait --timeout 10m
 
       - name: Verify rollout
         run: |
           kubectl rollout status deployment/${HELM_RELEASE}-agrimarket-api -n "$HELM_NAMESPACE" --timeout=300s
           kubectl rollout status deployment/${HELM_RELEASE}-agrimarket-nginx -n "$HELM_NAMESPACE" --timeout=300s
-          kubectl get pods,svc,ingress -n "$HELM_NAMESPACE"      
+          kubectl get pods,svc,ingress -n "$HELM_NAMESPACE"
