@@ -314,6 +314,7 @@ jobs:
             --set resources.limits.memory=400Mi \
             --set nginx.resources.requests.memory=32Mi \
             --set nginx.resources.requests.cpu=25m \
+            --set config.springProfilesActive=default \
             --wait --timeout 10m
 
       - name: Verify rollout
